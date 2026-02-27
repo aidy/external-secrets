@@ -1,9 +1,9 @@
-apiVersion: external-secrets.io/v1alpha1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: example
 spec:
-  refreshInterval: 1h
+  refreshInterval: 1h0m0s
   secretStoreRef:
     name: fake
     kind: ClusterSecretStore
@@ -15,4 +15,6 @@ spec:
       key: /foo/bar
       version: v1
   dataFrom:
-  - key: /foo/baz
+  - extract:
+      key: /foo/baz
+      version: v1
