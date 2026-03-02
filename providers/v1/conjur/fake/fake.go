@@ -36,6 +36,10 @@ func (mc *ConjurMockClient) LoadPolicy(policyMode conjurapi.PolicyMode, policyID
 	return nil, nil
 }
 
+func (mc *ConjurMockClient) WhoAmI() ([]byte, error) {
+	return nil, nil
+}
+
 func (mc *ConjurMockClient) RetrieveSecret(secret string) (result []byte, err error) {
 	if secret == "error" {
 		err = errors.New("error")
