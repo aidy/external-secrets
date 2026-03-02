@@ -19,6 +19,7 @@ package conjur
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -140,6 +141,20 @@ func (c *Client) PushSecret(ctx context.Context, secret *corev1.Secret, ref esv1
 		return getConjurClientError
 	}
 
+	type WhoAmIResponse struct {
+		Username string `json:"username"`
+	}
+	w, err := conjurClient.WhoAmI()
+	if err != nil {
+		return err
+	}
+	wr := WhoAmIResponse{}
+	err = json.Unmarshal(w, &wr)
+	if err != nil {
+		return err
+	}
+	user := strings.TrimPrefix(wr.Username, "host")
+
 	values := map[string]string{}
 	vars := []string{}
 
@@ -170,10 +185,9 @@ func (c *Client) PushSecret(ctx context.Context, secret *corev1.Secret, ref esv1
 	}
 	parentPolicy := fqSecretName[0:i]
 	policyName := fqSecretName[i+1:]
-	// TODO: Determine user
-	policy := conjurPolicy(policyName, vars, "/data/tlspc")
+	policy := conjurPolicy(policyName, vars, user)
 
-	_, err := conjurClient.LoadPolicy(conjurapi.PolicyModePost, parentPolicy, strings.NewReader(policy))
+	_, err = conjurClient.LoadPolicy(conjurapi.PolicyModePost, parentPolicy, strings.NewReader(policy))
 	if err != nil {
 		return err
 	}
