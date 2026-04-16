@@ -14,10 +14,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const policyTemplate = `
+const defaultPolicyTemplate = `
 - !policy
   id: {{ .Name }}
   body:
+  - !group
+    id: delegation/consumers
+    annotations:
+      managed-by: "external-secrets"
+      editable: "true"
 {{- range .Variables}}
   - !variable
     id: {{ . }}
@@ -25,28 +30,24 @@ const policyTemplate = `
       managed-by: "external-secrets"
 {{- end -}}
 
-{{- $name := .Name }}
-{{- $owner := .Owner }}
 {{ range .Variables}}
-- !permit
-  resource: !variable {{ $name }}/{{ . }}
-  role: !host {{ $owner }}
-  privileges: [ read, execute, update ]
+  - !permit
+    resource: !variable {{ . }}
+    role: !group delegation/consumers
+    privileges: [ read, execute ]
 {{ end }}
 `
 
-func conjurPolicy(name string, vars []string, user string) string {
+func conjurPolicy(name string, vars []string) string {
 	type policy struct {
 		Name      string
-		Owner     string
 		Variables []string
 	}
 	p := policy{
 		Name:      name,
-		Owner:     user,
 		Variables: vars,
 	}
-	t := template.Must(template.New("policy").Parse(policyTemplate))
+	t := template.Must(template.New("policy").Parse(defaultPolicyTemplate))
 	buf := &bytes.Buffer{}
 	t.Execute(buf, p)
 	return buf.String()
@@ -56,11 +57,6 @@ func (c *Client) PushSecret(ctx context.Context, secret *corev1.Secret, ref esv1
 	conjurClient, getConjurClientError := c.GetConjurClient(ctx)
 	if getConjurClientError != nil {
 		return getConjurClientError
-	}
-
-	user, err := c.getUsername(ctx)
-	if err != nil {
-		return err
 	}
 
 	values := map[string]string{}
@@ -149,9 +145,9 @@ func (c *Client) PushSecret(ctx context.Context, secret *corev1.Secret, ref esv1
 	if len(updateVars) == 0 {
 		return nil
 	}
-	policy := conjurPolicy(policyName, updateVars, user)
+	policy := conjurPolicy(policyName, updateVars)
 
-	_, err = conjurClient.LoadPolicy(conjurapi.PolicyModePost, parentPolicy, strings.NewReader(policy))
+	_, err := conjurClient.LoadPolicy(conjurapi.PolicyModePost, parentPolicy, strings.NewReader(policy))
 	if err != nil {
 		return err
 	}
