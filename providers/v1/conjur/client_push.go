@@ -14,16 +14,28 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const policyTemplate = `
+const defaultPolicyTemplate = `
 - !policy
   id: {{ .Name }}
   body:
+  - !group
+    id: delegation/consumers
+    annotations:
+      managed-by: "external-secrets"
+      editable: "true"
 {{- range .Variables}}
   - !variable
     id: {{ . }}
     annotations:
       managed-by: "external-secrets"
 {{- end -}}
+
+{{ range .Variables}}
+  - !permit
+    resource: !variable {{ . }}
+    role: !group delegation/consumers
+    privileges: [ read, execute ]
+{{ end }}
 `
 
 func conjurPolicy(name string, vars []string) string {
@@ -35,7 +47,7 @@ func conjurPolicy(name string, vars []string) string {
 		Name:      name,
 		Variables: vars,
 	}
-	t := template.Must(template.New("policy").Parse(policyTemplate))
+	t := template.Must(template.New("policy").Parse(defaultPolicyTemplate))
 	buf := &bytes.Buffer{}
 	t.Execute(buf, p)
 	return buf.String()
