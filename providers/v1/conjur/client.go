@@ -18,8 +18,10 @@ package conjur
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cyberark/conjur-api-go/conjurapi"
 	"github.com/cyberark/conjur-api-go/conjurapi/authn"
@@ -169,4 +171,28 @@ func (c *Client) conjurClientFromJWT(ctx context.Context, config conjurapi.Confi
 
 	c.client = conjur
 	return conjur, nil
+}
+
+// getUsername returns the username of the currently authenticated conjur user
+func (c *Client) getUsername(ctx context.Context) (string, error) {
+	conjurClient, getConjurClientError := c.GetConjurClient(ctx)
+	if getConjurClientError != nil {
+		return "", getConjurClientError
+	}
+
+	type WhoAmIResponse struct {
+		Username string `json:"username"`
+	}
+	w, err := conjurClient.WhoAmI()
+	if err != nil {
+		return "", err
+	}
+	wr := WhoAmIResponse{}
+	err = json.Unmarshal(w, &wr)
+	if err != nil {
+		return "", err
+	}
+	user := strings.TrimPrefix(wr.Username, "host")
+
+	return user, nil
 }

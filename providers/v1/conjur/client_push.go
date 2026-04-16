@@ -3,7 +3,6 @@ package conjur
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -60,19 +59,10 @@ func (c *Client) PushSecret(ctx context.Context, secret *corev1.Secret, ref esv1
 		return getConjurClientError
 	}
 
-	type WhoAmIResponse struct {
-		Username string `json:"username"`
-	}
-	w, err := conjurClient.WhoAmI()
+	user, err := c.getUsername(ctx)
 	if err != nil {
 		return err
 	}
-	wr := WhoAmIResponse{}
-	err = json.Unmarshal(w, &wr)
-	if err != nil {
-		return err
-	}
-	user := strings.TrimPrefix(wr.Username, "host")
 
 	values := map[string]string{}
 	vars := []string{}
