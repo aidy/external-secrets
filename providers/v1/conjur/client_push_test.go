@@ -3,7 +3,9 @@ package conjur
 import (
 	"testing"
 
+	"github.com/doodlesbykumbi/conjur-policy-go/pkg/conjurpolicy"
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v3"
 )
 
 func TestDefaultPolicy(t *testing.T) {
@@ -29,6 +31,7 @@ func TestDefaultPolicy(t *testing.T) {
     id: baz
     annotations:
       managed-by: "external-secrets"
+
   - !permit
     resource: !variable foo
     role: !group delegation/consumers
@@ -42,5 +45,13 @@ func TestDefaultPolicy(t *testing.T) {
     role: !group delegation/consumers
     privileges: [ read, execute ]`
 
-	assert.Equal(t, expected, policy)
+	// roundtrip the expected output through a unmarshal/marshal to remove any formatting related issues
+	p := conjurpolicy.PolicyStatements{}
+	err := yaml.Unmarshal([]byte(expected), &p)
+	assert.NoError(t, err)
+
+	exp, err := yaml.Marshal(p)
+	assert.NoError(t, err)
+
+	assert.Equal(t, string(exp), policy)
 }
