@@ -35,7 +35,7 @@ const defaultPolicyTemplate = `
     resource: !variable {{ . }}
     role: !group delegation/consumers
     privileges: [ read, execute ]
-{{ end }}
+{{- end -}}
 `
 
 func conjurPolicy(name string, vars []string) string {
