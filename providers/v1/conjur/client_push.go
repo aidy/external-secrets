@@ -1,56 +1,54 @@
 package conjur
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
-	"text/template"
 
 	"github.com/cyberark/conjur-api-go/conjurapi"
+	"github.com/doodlesbykumbi/conjur-policy-go/pkg/conjurpolicy"
 	esv1 "github.com/external-secrets/external-secrets/apis/externalsecrets/v1"
 	"github.com/external-secrets/external-secrets/runtime/esutils"
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 )
 
-const defaultPolicyTemplate = `
-- !policy
-  id: {{ .Name }}
-  body:
-  - !group
-    id: delegation/consumers
-    annotations:
-      managed-by: "external-secrets"
-      editable: "true"
-{{- range .Variables}}
-  - !variable
-    id: {{ . }}
-    annotations:
-      managed-by: "external-secrets"
-{{- end -}}
-
-{{ range .Variables}}
-  - !permit
-    resource: !variable {{ . }}
-    role: !group delegation/consumers
-    privileges: [ read, execute ]
-{{- end -}}
-`
-
 func conjurPolicy(name string, vars []string) string {
-	type policy struct {
-		Name      string
-		Variables []string
+	pvars := []conjurpolicy.Resource{}
+	permits := []conjurpolicy.Resource{}
+
+	for _, v := range vars {
+		pvars = append(pvars, conjurpolicy.Variable{
+			Id: v,
+			Annotations: map[string]interface{}{
+				"managed-by": "external-secrets",
+			},
+		})
+		permits = append(permits, conjurpolicy.Permit{
+			Resources:  conjurpolicy.VariableRef(v),
+			Role:       conjurpolicy.GroupRef("delegation/consumers"),
+			Privileges: []conjurpolicy.Privilege{conjurpolicy.PrivilegeRead, conjurpolicy.PrivilegeExecute},
+		})
 	}
-	p := policy{
-		Name:      name,
-		Variables: vars,
+	p := conjurpolicy.Policy{
+		Id: name,
+		Body: []conjurpolicy.Resource{
+			conjurpolicy.Group{
+				Id: "delegation/consumers",
+				Annotations: map[string]interface{}{
+					"managed-by": "external-secrets",
+					"editable":   "true",
+				},
+			},
+		},
 	}
-	t := template.Must(template.New("policy").Parse(defaultPolicyTemplate))
-	buf := &bytes.Buffer{}
-	t.Execute(buf, p)
-	return buf.String()
+	p.Body = append(p.Body, pvars...)
+	p.Body = append(p.Body, permits...)
+
+	y, err := yaml.Marshal(conjurpolicy.PolicyStatements{p})
+	_ = err
+	return string(y)
 }
 
 // PushSecret writes a single secret into the provider.
