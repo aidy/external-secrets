@@ -29,18 +29,30 @@ import (
 
 	esv1 "github.com/external-secrets/external-secrets/apis/externalsecrets/v1"
 	"github.com/external-secrets/external-secrets/runtime/esutils"
+	"github.com/external-secrets/external-secrets/runtime/esutils/metadata"
 )
 
-func conjurPolicy(name string, vars []string) (string, error) {
+type PushSecretMetadataSpec struct {
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+func conjurPolicy(name string, vars []string, annotations map[string]string) (string, error) {
 	pvars := make([]conjurpolicy.Resource, len(vars))
 	permits := make([]conjurpolicy.Resource, len(vars))
 
 	for i, v := range vars {
+		ann := map[string]any{
+			"managed-by": "external-secrets",
+		}
+		for ak, av := range annotations {
+			if ak == "managed-by" {
+				continue
+			}
+			ann[ak] = av
+		}
 		pvars[i] = conjurpolicy.Variable{
-			Id: v,
-			Annotations: map[string]any{
-				"managed-by": "external-secrets",
-			},
+			Id:          v,
+			Annotations: ann,
 		}
 		permits[i] = conjurpolicy.Permit{
 			Resources:  conjurpolicy.VariableRef(v),
@@ -72,6 +84,11 @@ func conjurPolicy(name string, vars []string) (string, error) {
 
 // PushSecret writes a single secret into the provider.
 func (c *Client) PushSecret(ctx context.Context, secret *corev1.Secret, ref esv1.PushSecretData) error {
+	mdata, err := metadata.ParseMetadataParameters[PushSecretMetadataSpec](ref.GetMetadata())
+	if err != nil {
+		return fmt.Errorf("failed to parse push secret metadata: %w", err)
+	}
+
 	conjurClient, getConjurClientError := c.GetConjurClient(ctx)
 	if getConjurClientError != nil {
 		return getConjurClientError
@@ -119,7 +136,7 @@ func (c *Client) PushSecret(ctx context.Context, secret *corev1.Secret, ref esv1
 	if len(updateVars) == 0 {
 		return nil
 	}
-	policy, err := conjurPolicy(policyName, updateVars)
+	policy, err := conjurPolicy(policyName, updateVars, mdata.Spec.Annotations)
 	if err != nil {
 		return err
 	}
